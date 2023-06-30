@@ -1,11 +1,11 @@
 import time
 import re
 import abc
+import json
 
 class DatabaseStrategy(abc.ABC):
-    def __init__(self,cursor,connection):
+    def __init__(self, cursor):
         self.cursor = cursor
-        self.connection = connection
     @abc.abstractmethod
     def create_table(self):
         pass
@@ -85,7 +85,11 @@ class H2DatabaseStrategy(DatabaseStrategy):
                 file.write(line)
 
 class RedisStrategy(DatabaseStrategy):
-    # В Redis не нужно создавать таблицы, так как данные хранятся в ключах и значениях
+    def __init__(self, cursor):
+        self.cursor = cursor
+    def create_table(self):
+        # В Redis не нужно создавать таблицы, так как данные хранятся в ключах и значениях
+        pass
     def insert_data(self, values):
         key = self._generate_key()
         data = {
@@ -100,14 +104,19 @@ class RedisStrategy(DatabaseStrategy):
             "user_agent": values[8],
             "balancer_worker_name": values[9]
         }
-        self.cursor.set(key, data)
+        json_data = json.dumps(data)
+        self.cursor.set(key, json_data)
 
     def export_data(self, log_file):
-        log_data = self.cursor.keys()
+        log_data_keys = self.cursor.keys("*")
+        log_data = []
+        for key in log_data_keys:
+            json_data = self.cursor.get(key)
+            data = json.loads(json_data)
+            log_data.append(data)
 
         with open(log_file, 'w') as file:
-            for key in log_data:
-                data = self.cursor.get(key)
+            for data in log_data:
                 line = f"{data['ip_address']} ({data['forwarded_for']}) - - [{data['timestamp']}] \"{data['request']}\" {data['status_code']} {data['response_size']} {data['time_taken']} {data['balancer_worker_name']} \"{data['referer']}\" \"{data['user_agent']}\"\n"
                 file.write(line)
 

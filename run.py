@@ -11,7 +11,8 @@ def main():
     parser.add_argument("--port", type=int, help="Database port")
     parser.add_argument("--username", type=str, help="Database username")
     parser.add_argument("--password", type=str, help="Database password")
-    parser.add_argument("--db_name", type=str, required=True, help="Database name")
+    parser.add_argument("--db_index", type=int, help="Database index for Redis")
+    parser.add_argument("--db_name", type=str, help="Database name")
     parser.add_argument("--log_file", type=str, required=True, help="Path to the log file")
     parser.add_argument("--mongodb_uri", type=str, help="MongoDB connection URI")
     parser.add_argument('--export', metavar='filename', help='Export log data to a file')
@@ -25,7 +26,7 @@ def main():
             db_name=args.db_name,
             mongodb_uri=args.mongodb_uri
         )
-    elif args.database == "MySQL" and args.host and args.port and args.username and args.password:
+    elif args.database in ["MySQL", "PostgreSQL", "SQLite", "H2"] and args.host and args.port and args.username and args.password:
         db_connector = Connector.DatabaseConnector(
             args.database,
             host=args.host,
@@ -34,6 +35,14 @@ def main():
             password=args.password,
             db_name=args.db_name
         )
+    elif args.database == "Redis":
+        db_connector = Connector.DatabaseConnector(
+            args.database,
+            host=args.host,
+            port=args.port,
+            db_index=args.db_index
+        )
+        
     else:
         print("Error: Missing required arguments for the selected database type.")
         return
@@ -48,8 +57,9 @@ def main():
         if args.analyze == 'ip_user_agent':
             # Вызываем функцию get_ip_user_agent_statistics и печатаем результат
             statistics = log_analyzer.get_ip_user_agent_statistics(5,args.database)
-            for row in statistics:
-                print(row)
+            print("IP Address\tUser Agent\tFrequency")
+            for stats in statistics:
+                print(f"{stats[0]}\t{stats[1]}\t{stats[2]}")
         elif args.analyze == 'query_frequency':
             # Вызываем функцию get_query_frequency и печатаем результат
             frequency = log_analyzer.get_query_frequency(args.database)
@@ -134,7 +144,11 @@ def main():
             print(active_periods)
         
     elif args.database == "Redis":
-        print("Error: Redis database not supported for this query.")
+        # Проверяем, какую функцию анализа нужно вызвать
+        if args.analyze == 'ip_user_agent':
+            # Вызываем функцию get_ip_user_agent_statistics и печатаем результат
+            statistics = log_analyzer.get_ip_user_agent_statistics(5,args.database)
+            print(f'Redis statistics {statistics}')
     else:
         print("Error: Invalid db_type value. Must be one of: MySQL, PostgreSQL, SQLite, H2, MongoDB.")
         

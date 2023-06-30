@@ -17,9 +17,15 @@ cd DataBasesPythonParsingLog
 ```
 Then run the script as follows:
 ```
-python run.py --database MongoDB --mongodb_uri mongodb://localhost:27017 --db_name access_log --log_file access_log
+Примеры запуска команд
 
-python run.py --database mysql --host localhost --port 3306 --username root --password 12345678 --db_name access_log --log_file access_log
+python run.py --database MongoDB --mongodb_uri mongodb://localhost:27017 --db_name access_log --log_file access_log --analyze ip_user_agent
+
+python run.py --database MySQL --host localhost --port 3306 --username root --password 12345678 --db_name access_log --log_file access_log --analyze ip_user_agent
+
+python run.py --database Redis --host localhost --port 6379 --db_index 2 --log_file access_log
+
+python run.py --database Redis --host localhost --port 6379 --db_index 2 --log_file access_log --analyze ip_user_agent
 
 пример команды выполненя запроса к базе данных 
 

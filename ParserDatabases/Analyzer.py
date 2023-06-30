@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 class LogAnalyzer:
     def __init__(self, db_connector):
         self.db_connector = db_connector
@@ -43,13 +44,37 @@ class LogAnalyzer:
                 {"$sort": {"count": -1}},
                 {"$limit": n}
                 ]
-        elif db_type == "Redis":
-            raise NotImplementedError("Redis database not supported for this query.")
+        elif db_type == "Redis": 
+            # Get all keys from the Redis database
+            keys = self.db_connector.connection.keys("*")
+            # Initialize a dictionary to store the counts for each IP address and user agent combination
+            counts = {}
+            # Iterate over the keys
+            for key in keys:
+                # Get the JSON data for the current key
+                json_data = self.db_connector.connection.get(key)
+                # Load the JSON data into a dictionary
+                data = json.loads(json_data)
+                # Get the IP address and user agent from the data
+                ip_address = data["ip_address"]
+                user_agent = data["user_agent"]
+                # Create a tuple representing the IP address and user agent combination
+                key = (ip_address, user_agent)
+                # Increment the count for this IP address and user agent combination
+                counts[key] = counts.get(key, 0) + 1
+                # Convert the counts dictionary into a list of tuples
+            data = list(counts.items())
+            # Sort the data by count in descending order
+            data.sort(key=lambda x: x[1], reverse=True)
+            # Get the top n results
+            result = data[:n]
+            return result
+
         else:
             raise ValueError("Invalid db_type value. Must be one of: MySQL, PostgreSQL, SQLite, H2, MongoDB.")
-    
-        result = self.db_connector.execute_query(query)
-        return result
+        if db_type != "Redis":
+            result = self.db_connector.execute_query(query)
+            return result
 
     def get_query_frequency(self, dT, db_type):
         query = ""

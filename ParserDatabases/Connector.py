@@ -6,7 +6,7 @@ from pymongo import MongoClient
 import redis
 
 class DatabaseConnector:
-    def __init__(self, database, host=None, port=None, username=None, password=None, db_name=None, mongodb_uri=None):
+    def __init__(self, database, host=None, port=None, username=None, password=None, db_name=None, mongodb_uri=None,db_index=None):
         self.database = database
         self.host = host
         self.port = port
@@ -15,6 +15,7 @@ class DatabaseConnector:
         self.db_name = db_name
         self.connection = None
         self.mongodb_uri = mongodb_uri
+        self.db_index = db_index
 
     def connect(self):
         if self.database == "MySQL":
@@ -74,17 +75,19 @@ class DatabaseConnector:
         return connection
 
     def connect_redis(self):
-        connection = redis.Redis(host=self.host, port=self.port, password=self.password, db=self.db_name)
+        connection = redis.Redis(host=self.host, port=self.port, db=self.db_index)
         return connection
 
     # Запрос к базе данных
     def execute_query(self, query, params=None):
         if self.database == "MongoDB":
-            # Выполнение запроса к базе данных MongoDB
-            #print(f'Запрос {query} соединение {self.connection}')
+        # Выполнение запроса к базе данных MongoDB
             result = self.connection['log_data'].aggregate(query)
+        elif self.database == "Redis":
+            # Выполнение запроса к базе данных Redis
+            result = self.connection.execute_command(*query)
         else:
-        # Выполнение запроса к реляционной базе данных
+            # Выполнение запроса к реляционной базе данных
             cursor = self.connection.cursor()
             cursor.execute(query, params)
             result = cursor.fetchall()
