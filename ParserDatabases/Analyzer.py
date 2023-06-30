@@ -1,3 +1,4 @@
+from datetime import datetime
 class LogAnalyzer:
     def __init__(self, db_connector):
         self.db_connector = db_connector
@@ -60,25 +61,29 @@ class LogAnalyzer:
                 ORDER BY interval_start
             """
         elif db_type == "MongoDB":
-            query = """
-                db.log_data.aggregate([
-                    {{
-                        $group: {{
-                            _id: {{
-                                year: {{ $year: "$timestamp" }},
-                                month: {{ $month: "$timestamp" }},
-                                day: {{ $dayOfMonth: "$timestamp" }},
-                                hour: {{ $hour: "$timestamp" }},
-                                minute: {{ $minute: "$timestamp" }}
-                            }},
-                            frequency: {{ $sum: 1 }}
-                        }}
-                    }},
-                    {{
-                        $sort: {{ "_id.year": 1, "_id.month": 1, "_id.day": 1, "_id.hour": 1, "_id.minute": 1 }}
-                    }}
-                ])
-            """
+            query = [
+                        {
+                            "$group": {
+                                "_id": {
+                                    "year": {"$year": "$timestamp"},
+                                    "month": {"$month": "$timestamp"},
+                                    "day": {"$dayOfMonth": "$timestamp"},
+                                    "hour": {"$hour": "$timestamp"},
+                                    "minute": {"$minute": "$timestamp"}
+                                },
+                                "frequency": {"$sum": 1}
+                            }
+                        },
+                        {
+                            "$sort": {
+                                "_id.year": 1,
+                                "_id.month": 1,
+                                "_id.day": 1,
+                                "_id.hour": 1,
+                                "_id.minute": 1
+                            }
+                        }
+                    ]
         elif db_type == "Redis":
             raise NotImplementedError("Redis database not supported for this query.")
         else:
@@ -98,22 +103,20 @@ class LogAnalyzer:
                 LIMIT %s
             """
         elif db_type == "MongoDB":
-            query = f"""
-                db.log_data.aggregate([
-                    {{
-                        $group: {{
-                            _id: "$user_agent",
-                            frequency: {{ $sum: 1 }}
-                        }}
-                    }},
-                    {{
-                        $sort: {{ frequency: -1 }}
-                    }},
-                    {{
-                        $limit: {N}
-                    }}
-                ])
-            """
+            query = [
+                    {
+                        "$group": {
+                            "_id": "$user_agent",
+                            "frequency": {"$sum": 1}
+                        }
+                    },
+                    {
+                        "$sort": {"frequency": -1}
+                    },
+                    {
+                        "$limit": N
+                    }
+                ]
         elif db_type == "Redis":
             raise NotImplementedError("Redis database not supported for this query.")
         else:
@@ -133,24 +136,22 @@ class LogAnalyzer:
                 GROUP BY status_code
             """
         elif db_type == "MongoDB":
-            query = """
-                db.log_data.aggregate([
-                    {{
-                        $match: {{
-                            status_code: /^5/
-                            timestamp: {{
-                                $gte: ISODate(new Date() - {dT} * 60000)
-                            }}
-                        }}
-                    }},
-                    {{
-                        $group: {{
-                            _id: "$status_code",
-                            frequency: {{ $sum: 1 }}
-                        }}
-                    }}
-                ])
-            """
+            query = [
+                    {
+                        "$match": {
+                            "status_code": {"$regex": "^5"},
+                            "timestamp": {
+                                "$gte": datetime.datetime.now() - datetime.timedelta(minutes=dT)
+                            }
+                        }
+                    },
+                    {
+                        "$group": {
+                            "_id": "$status_code",
+                            "frequency": {"$sum": 1}
+                        }
+                    }
+                ]
         elif db_type == "Redis":
             raise NotImplementedError("Redis database not supported for this query.")
         else:
@@ -162,9 +163,15 @@ class LogAnalyzer:
 
     def get_longest_shortest_requests(self, limit, order_by, db_type):
         if order_by == "longest":
-            order_by_clause = "DESC"
+            if db_type == "MongoDB":
+                order_by_clause = -1
+            else:
+                order_by_clause = "DESC"        
         elif order_by == "shortest":
-            order_by_clause = "ASC"
+            if db_type == "MongoDB":
+                order_by_clause = 1
+            else:
+                order_by_clause = "ASC"        
         else:
             raise ValueError("Invalid order_by value. Must be 'longest' or 'shortest'.")
         
@@ -177,9 +184,20 @@ class LogAnalyzer:
                 LIMIT %s
             """
         elif db_type == "MongoDB":
-            query = f"""
-                db.log_data.find().sort({{"time_taken": {"$order_by_clause": 1}}}).limit({limit})
-            """
+            query = [
+                    {
+                        "$project": {
+                            "request": 1,
+                            "time_taken": 1
+                        }
+                    },
+                    {
+                        "$sort": {"time_taken": order_by_clause}
+                    },
+                    {
+                        "$limit": limit
+                    }
+                ]
         elif db_type == "Redis":
             raise NotImplementedError("Redis database not supported for this query.")
         else:
@@ -200,29 +218,30 @@ class LogAnalyzer:
                 LIMIT %s
             """
         elif db_type == "MongoDB":
-            query = f"""
-                db.log_data.aggregate([
-                    {{
-                        $match: {{
-                            request: /^GET /
-                        }}
-                    }},
-                    {{
-                        $group: {{
-                            _id: {{
-                                $substr: ["$request", 0, {slash_count+5}]
-                            }},
-                            frequency: {{ $sum: 1 }}
-                        }}
-                    }},
-                    {{
-                        $sort: {{ frequency: -1 }}
-                    }},
-                    {{
-                        $limit: {N}
-                    }}
-                ])
-            """
+            query = [
+                        {
+                            "$match": {
+                                "request": {"$regex": "^GET "}
+                            }
+                        },
+                        {
+                            "$project": {
+                                "request_pattern": {"$arrayElemAt": [{"$split": ["$request", " "]}, slash_count]}
+                            }
+                        },
+                        {
+                            "$group": {
+                                "_id": "$request_pattern",
+                                "frequency": {"$sum": 1}
+                            }
+                        },
+                        {
+                            "$sort": {"frequency": -1}
+                        },
+                        {
+                            "$limit": N
+                        }
+                    ]
         elif db_type == "Redis":
             raise NotImplementedError("Redis database not supported for this query.")
         else:
@@ -241,22 +260,20 @@ class LogAnalyzer:
                 GROUP BY BALANCER_WORKER_NAME
             """
         elif db_type == "MongoDB":
-            query = """
-                db.log_data.aggregate([
-                    {{
-                        $match: {{
-                            BALANCER_WORKER_NAME: {{ $exists: true }}
-                        }}
-                    }},
-                    {{
-                        $group: {{
-                            _id: "$BALANCER_WORKER_NAME",
-                            request_count: {{ $sum: 1 }},
-                            average_time: {{ $avg: "$timestamp" }}
-                        }}
-                    }}
-                ])
-            """
+            query = [
+                    {
+                        "$match": {
+                            "BALANCER_WORKER_NAME": {"$exists": True}
+                        }
+                    },
+                    {
+                        "$group": {
+                            "_id": "$BALANCER_WORKER_NAME",
+                            "request_count": {"$sum": 1},
+                            "average_time": {"$avg": "$timestamp"}
+                        }
+                    }
+                ]
         elif db_type == "Redis":
             raise NotImplementedError("Redis database not supported for this query.")
         else:
@@ -277,31 +294,27 @@ class LogAnalyzer:
                 ORDER BY {} DESC
             """.format(sort_by)
         elif db_type == "MongoDB":
-            query = f"""
-                db.log_data.aggregate([
-                    {{
-                        $match: {{
-                            Referer: {{ $exists: true }}
-                        }}
-                    }},
-                    {{
-                        $group: {{
-                            _id: {{
-                                $arrayElemAt: [
-                                    {{
-                                        $split: ["$Referer", "/"]
-                                    }},
+            query = [
+                    {
+                        "$match": {
+                            "Referer": {"$exists": True}
+                        }
+                    },
+                    {
+                        "$group": {
+                            "_id": {
+                                "$arrayElemAt": [
+                                    {"$split": ["$Referer", "/"]},
                                     2
                                 ]
-                            }},
-                            conversion_count: {{ $sum: 1 }}
-                        }}
-                    }},
-                    {{
-                        $sort: {{ "conversion_count": -1 }}
-                    }}
-                ])
-            """
+                            },
+                            "conversion_count": {"$sum": 1}
+                        }
+                    },
+                    {
+                        "$sort": {"conversion_count": -1}
+                    }
+                ]
         elif db_type == "Redis":
             raise NotImplementedError("Redis database not supported for this query.")
         else:

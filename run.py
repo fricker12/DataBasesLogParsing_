@@ -41,7 +41,7 @@ def main():
     log_analyzer = Analyzer.LogAnalyzer(db_connector)
     #log_data_manager.export_log_data("exported_log_file.txt")
     
-    ip_user_agent_stats = log_analyzer.get_ip_user_agent_statistics(5,args.database)
+    ip_user_agent_stats = log_analyzer.get_common_requests(5,3,args.database)
     print("IP Address\tUser Agent\tFrequency")
     for document in ip_user_agent_stats:
         print(document['_id'])
