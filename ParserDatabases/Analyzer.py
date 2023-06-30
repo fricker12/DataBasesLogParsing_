@@ -1,10 +1,12 @@
 from datetime import datetime
+import time
 import json
 class LogAnalyzer:
     def __init__(self, db_connector):
         self.db_connector = db_connector
     
     def get_ip_user_agent_statistics(self, n, db_type):
+        start_time = time.time()
         query = ""
         if db_type == "MySQL":
             query = f"""
@@ -68,12 +70,18 @@ class LogAnalyzer:
             data.sort(key=lambda x: x[1], reverse=True)
             # Get the top n results
             result = data[:n]
+            end_time = time.time()
+            execution_time = end_time - start_time
+            print(f"Запрос выполнился за {execution_time} секунд.")
             return result
 
         else:
             raise ValueError("Invalid db_type value. Must be one of: MySQL, PostgreSQL, SQLite, H2, MongoDB.")
         if db_type != "Redis":
             result = self.db_connector.execute_query(query)
+            end_time = time.time()
+            execution_time = end_time - start_time
+            print(f"Запрос выполнился за {execution_time} секунд.")
             return result
 
     def get_query_frequency(self, dT, db_type):
