@@ -321,26 +321,84 @@ class LogAnalyzer:
             raise ValueError("Invalid db_type value. Must be one of: MySQL, PostgreSQL, SQLite, H2, MongoDB.")
         
         result = self.db_connector.execute_query(query)
+        return result
     
-#    def get_upstream_requests(self, interval):
-#        query = """
-#            SELECT COUNT(*) AS upstream_request_count, AVG(time_taken) AS average_time
-#            FROM log_data
-#            WHERE `timestamp` >= NOW() - INTERVAL %s
-#                AND `BALANCER_WORKER_NAME` IS NOT NULL
-#        """
-#        result = self.db_connector.execute_query(query, (interval,))
-#        return result
-#    
-#    def find_most_active_periods(self, N):
-#        query = """
-#            SELECT CONCAT(DATE_FORMAT(`timestamp`, '%%Y-%%m-%%d %%H:'), LPAD((MINUTE(`timestamp`) DIV %s) * %s, 2, '0')) AS period,
-#            COUNT(*) AS request_count
-#            FROM log_data
-#            WHERE `timestamp` >= DATE_SUB(NOW(), INTERVAL %s)
-#            GROUP BY period
-#            ORDER BY request_count DESC
-#            LIMIT %s
-#        """
-#        result = self.db_connector.execute_query(query, (N, N, N, N))
+    def get_upstream_requests(self, interval, db_type):
+        query = ""
+        if db_type == "MySQL" or db_type == "PostgreSQL" or db_type == "SQLite" or db_type == "H2":
+            query = """
+            SELECT COUNT(*) AS upstream_request_count, AVG(time_taken) AS average_time
+            FROM log_data
+            WHERE `timestamp` >= NOW() - INTERVAL %s
+                AND `BALANCER_WORKER_NAME` IS NOT NULL
+            """
+        elif db_type == "MongoDB":
+            query = [
+                {
+                    "$match": {
+                        "timestamp": {
+                            "$gte": datetime.datetime.now() - datetime.timedelta(minutes=interval)
+                        }
+                    }
+                },
+                {
+                    "$match": {
+                        "BALANCER_WORKER_NAME": {"$ne": None}
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": None,
+                        "upstream_request_count": {"$sum": 1},
+                        "average_time": {"$avg": "$time_taken"}
+                    }
+                }
+            ]
+            
+        elif db_type == "Redis":
+            raise NotImplementedError("Redis database not supported for this query.")
+        else:
+            raise ValueError("Invalid db_type value. Must be one of: MySQL, PostgreSQL, SQLite, H2, MongoDB.")
+            
+        result = self.db_connector.execute_query(query, (interval,))
+        return result
+    
+    def find_most_active_periods(self, N, db_type):
+        query = ""
+        if db_type == "MySQL" or db_type == "PostgreSQL" or db_type == "SQLite" or db_type == "H2":
+            query = """
+                SELECT CONCAT(DATE_FORMAT(`timestamp`, '%%Y-%%m-%%d %%H:'), LPAD((MINUTE(`timestamp`) DIV %s) * %s, 2, '0')) AS period,
+                COUNT(*) AS request_count
+                FROM log_data
+                WHERE `timestamp` >= DATE_SUB(NOW(), INTERVAL %s)
+                GROUP BY period
+                ORDER BY request_count DESC
+                LIMIT %s
+            """
+        elif db_type == "MongoDB":
+            query = [
+                {
+                    "$match": {
+                        "timestamp": {
+                            "$gte": {
+                                "$subtract": ["$$NOW", { "$multiply": [N, 60000] }]
+                            }
+                        }
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "$concat": [
+                                { "$dateToString": { "format": "%Y-%m-%d %H:", "date": "$timestamp" } },
+                                { "$substr": [{ "$multiply": [{ "$minute": "$timestamp" }, N] }, 0, -1] }
+                            ]
+                        },
+                        "request_count": { "$sum": 1 }
+                    }
+                },
+                { "$sort": { "request_count": -1 } },
+            ]
+               
+        result = self.db_connector.execute_query(query, (N, N, N, N))
         return result
